@@ -18,6 +18,9 @@ const crypto = require('crypto');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
+// Wichtig für Railway: Server muss auf 0.0.0.0 lauschen
+const HOST = process.env.HOST || '0.0.0.0';
+
 // Middleware
 // CORS: Erlaube alle Origins für öffentliches Hosting
 // In Production sollte man spezifische Domains erlauben
@@ -581,15 +584,44 @@ app.get('/health', (req, res) => {
 
 // Start server
 async function startServer() {
-  await initRedis();
-  initPostgreSQL();
-  initSolana();
-  
-  app.listen(PORT, () => {
-    console.log(`🚀 Key of Silent Insight API Server running on port ${PORT}`);
-    console.log(`📡 API Base: http://localhost:${PORT}/v1`);
-    console.log(`🏥 Health: http://localhost:${PORT}/health`);
-  });
+  try {
+    // Initialisiere Services (nicht-blockierend)
+    await initRedis().catch(err => {
+      console.warn('⚠️  Redis initialization failed, continuing without Redis:', err.message);
+    });
+    initPostgreSQL();
+    initSolana();
+    
+    // Starte Server
+    app.listen(PORT, '0.0.0.0', () => {
+      console.log(`🚀 Key of Silent Insight API Server running on port ${PORT}`);
+      console.log(`📡 API Base: http://0.0.0.0:${PORT}/v1`);
+      console.log(`🏥 Health: http://0.0.0.0:${PORT}/health`);
+    });
+    
+    // Error Handling für Server
+    app.on('error', (err) => {
+      console.error('❌ Server error:', err);
+    });
+    
+    // Graceful shutdown
+    process.on('SIGTERM', () => {
+      console.log('SIGTERM received, shutting down gracefully...');
+      process.exit(0);
+    });
+    
+    process.on('SIGINT', () => {
+      console.log('SIGINT received, shutting down gracefully...');
+      process.exit(0);
+    });
+    
+  } catch (error) {
+    console.error('❌ Failed to start server:', error);
+    process.exit(1);
+  }
 }
 
-startServer().catch(console.error);
+startServer().catch((error) => {
+  console.error('❌ Fatal error starting server:', error);
+  process.exit(1);
+});
