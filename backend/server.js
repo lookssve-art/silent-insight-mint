@@ -9,31 +9,35 @@
 try {
   require('dotenv').config();
 } catch (e) {
-  // Ignore if dotenv fails
+  // Ignore if dotenv fails - Railway uses environment variables directly
 }
 
 const express = require('express');
 const cors = require('cors');
-
-// Optional dependencies - Server startet auch ohne diese
-let createClient;
-try {
-  createClient = require('redis').createClient;
-} catch (e) {
-  console.warn('Redis not available');
-}
-
-let Pool;
-try {
-  Pool = require('pg').Pool;
-} catch (e) {
-  console.warn('PostgreSQL not available');
-}
-
 const { Connection, Keypair, PublicKey } = require('@solana/web3.js');
 const bs58 = require('bs58');
 const nacl = require('tweetnacl');
 const crypto = require('crypto');
+
+// Optional dependencies - try/catch für Railway
+let createClient;
+let Pool;
+
+try {
+  const redis = require('redis');
+  createClient = redis.createClient;
+} catch (e) {
+  console.warn('⚠️  Redis module not available, continuing without Redis');
+  createClient = null;
+}
+
+try {
+  const pg = require('pg');
+  Pool = pg.Pool;
+} catch (e) {
+  console.warn('⚠️  PostgreSQL module not available, continuing without PostgreSQL');
+  Pool = null;
+}
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -59,14 +63,14 @@ let solanaConnection;
 
 // Initialize Redis
 async function initRedis() {
-  // Skip Redis if module not available or no host configured
+  // Skip Redis if module not available
   if (!createClient) {
     console.log('ℹ️  Redis module not available, skipping...');
     redisClient = null;
     return Promise.resolve();
   }
   
-  // Skip Redis if no host is configured (Railway doesn't always have Redis)
+  // Skip Redis if no host is configured
   if (!process.env.REDIS_HOST || process.env.REDIS_HOST === '' || process.env.REDIS_HOST === 'localhost') {
     console.log('ℹ️  Redis not configured, skipping...');
     redisClient = null;
@@ -646,43 +650,81 @@ app.get('/health', (req, res) => {
 // Start server
 async function startServer() {
   try {
-    // Initialisiere Services (nicht-blockierend)
-    await initRedis().catch(err => {
-      console.warn('⚠️  Redis initialization failed, continuing without Redis:', err.message);
-    });
-    initPostgreSQL();
-    initSolana();
+    console.log('🚀 Starting Key of Silent Insight API Server...');
+    console.log(`📊 Environment: ${process.env.NODE_ENV || 'development'}`);
+    console.log(`📊 Port: ${PORT}`);
     
-    // Starte Server
-    app.listen(PORT, '0.0.0.0', () => {
-      console.log(`🚀 Key of Silent Insight API Server running on port ${PORT}`);
+    // Initialisiere Services (nicht-blockierend, Fehler werden ignoriert)
+    try {
+      await initRedis();
+    } catch (err) {
+      console.warn('⚠️  Redis init failed, continuing:', err.message);
+    }
+    
+    try {
+      initPostgreSQL();
+    } catch (err) {
+      console.warn('⚠️  PostgreSQL init failed, continuing:', err.message);
+    }
+    
+    try {
+      initSolana();
+    } catch (err) {
+      console.warn('⚠️  Solana init failed, continuing:', err.message);
+    }
+    
+    // Starte Server auf 0.0.0.0 für Railway
+    const server = app.listen(PORT, '0.0.0.0', () => {
+      console.log(`✅ Key of Silent Insight API Server running on port ${PORT}`);
       console.log(`📡 API Base: http://0.0.0.0:${PORT}/v1`);
       console.log(`🏥 Health: http://0.0.0.0:${PORT}/health`);
     });
     
     // Error Handling für Server
-    app.on('error', (err) => {
+    server.on('error', (err) => {
       console.error('❌ Server error:', err);
+      if (err.code === 'EADDRINUSE') {
+        console.error(`Port ${PORT} is already in use`);
+      }
     });
     
     // Graceful shutdown
     process.on('SIGTERM', () => {
       console.log('SIGTERM received, shutting down gracefully...');
-      process.exit(0);
+      server.close(() => {
+        process.exit(0);
+      });
     });
     
     process.on('SIGINT', () => {
       console.log('SIGINT received, shutting down gracefully...');
-      process.exit(0);
+      server.close(() => {
+        process.exit(0);
+      });
+    });
+    
+    // Unhandled errors
+    process.on('uncaughtException', (err) => {
+      console.error('❌ Uncaught Exception:', err);
+      // Don't exit - let Railway handle it
+    });
+    
+    process.on('unhandledRejection', (err) => {
+      console.error('❌ Unhandled Rejection:', err);
+      // Don't exit - let Railway handle it
     });
     
   } catch (error) {
     console.error('❌ Failed to start server:', error);
+    console.error('Stack:', error.stack);
+    // Exit with error code so Railway knows it failed
     process.exit(1);
   }
 }
 
+// Start server
 startServer().catch((error) => {
   console.error('❌ Fatal error starting server:', error);
+  console.error('Stack:', error.stack);
   process.exit(1);
 });
