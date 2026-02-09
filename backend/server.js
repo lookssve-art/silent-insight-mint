@@ -39,11 +39,18 @@ let solanaConnection;
 
 // Initialize Redis
 async function initRedis() {
+  // Skip Redis if no host is configured (Railway doesn't always have Redis)
+  if (!process.env.REDIS_HOST || process.env.REDIS_HOST === '' || process.env.REDIS_HOST === 'localhost') {
+    console.log('ℹ️  Redis not configured, skipping...');
+    redisClient = null;
+    return Promise.resolve();
+  }
+  
   try {
     redisClient = createClient({
       socket: {
-        host: process.env.REDIS_HOST || 'localhost',
-        port: process.env.REDIS_PORT || 6379,
+        host: process.env.REDIS_HOST,
+        port: parseInt(process.env.REDIS_PORT || '6379'),
         reconnectStrategy: false, // Don't retry on connection failure
       },
       password: process.env.REDIS_PASSWORD || undefined,
@@ -51,6 +58,7 @@ async function initRedis() {
     
     redisClient.on('error', (err) => {
       // Silently ignore Redis errors - we'll use in-memory fallback
+      console.warn('⚠️  Redis error:', err.message);
       redisClient = null;
     });
     
@@ -60,17 +68,25 @@ async function initRedis() {
     ]);
     console.log('✅ Redis connected');
   } catch (error) {
-    console.log('⚠️  Redis not available, using in-memory storage');
+    // Redis is optional - continue without it
+    console.warn('⚠️  Redis not available, using in-memory storage:', error.message);
     redisClient = null;
   }
 }
 
 // Initialize PostgreSQL
 function initPostgreSQL() {
+  // Skip PostgreSQL if no host is configured (Railway doesn't always have PostgreSQL)
+  if (!process.env.DB_HOST || process.env.DB_HOST === '' || process.env.DB_HOST === 'localhost') {
+    console.log('ℹ️  PostgreSQL not configured, using in-memory storage');
+    dbPool = null;
+    return;
+  }
+  
   try {
     dbPool = new Pool({
-      host: process.env.DB_HOST || 'localhost',
-      port: process.env.DB_PORT || 5432,
+      host: process.env.DB_HOST,
+      port: parseInt(process.env.DB_PORT || '5432'),
       database: process.env.DB_NAME || 'silent_insight',
       user: process.env.DB_USER || 'postgres',
       password: process.env.DB_PASSWORD || 'postgres',
@@ -84,19 +100,28 @@ function initPostgreSQL() {
   } catch (error) {
     console.error('❌ PostgreSQL connection failed:', error.message);
     console.log('⚠️  Continuing without PostgreSQL (using in-memory storage)');
+    dbPool = null;
   }
 }
 
 // Initialize Solana
 function initSolana() {
+  const rpcUrl = process.env.SOLANA_RPC_URL || 'https://api.mainnet-beta.solana.com';
+  
   try {
-    solanaConnection = new Connection(
-      process.env.SOLANA_RPC_URL || 'https://api.mainnet-beta.solana.com',
-      'confirmed'
-    );
-    console.log('✅ Solana connection established');
+    solanaConnection = new Connection(rpcUrl, 'confirmed');
+    console.log(`✅ Solana connected to ${rpcUrl}`);
+    
+    // Test connection (non-blocking)
+    solanaConnection.getVersion().then(version => {
+      console.log(`✅ Solana RPC version: ${version['solana-core']}`);
+    }).catch(err => {
+      console.warn('⚠️  Solana RPC test failed (continuing anyway):', err.message);
+    });
   } catch (error) {
-    console.error('❌ Solana connection failed:', error.message);
+    console.error('❌ Failed to initialize Solana connection:', error.message);
+    console.warn('⚠️  Continuing without Solana connection');
+    solanaConnection = null;
   }
 }
 
