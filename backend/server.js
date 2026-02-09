@@ -5,11 +5,31 @@
  * Implements the four-stage alignment protocol for NFT minting
  */
 
-require('dotenv').config();
+// Lade .env nur wenn vorhanden (Railway verwendet Environment Variables direkt)
+try {
+  require('dotenv').config();
+} catch (e) {
+  // Ignore if dotenv fails
+}
+
 const express = require('express');
 const cors = require('cors');
-const { createClient } = require('redis');
-const { Pool } = require('pg');
+
+// Optional dependencies - Server startet auch ohne diese
+let createClient;
+try {
+  createClient = require('redis').createClient;
+} catch (e) {
+  console.warn('Redis not available');
+}
+
+let Pool;
+try {
+  Pool = require('pg').Pool;
+} catch (e) {
+  console.warn('PostgreSQL not available');
+}
+
 const { Connection, Keypair, PublicKey } = require('@solana/web3.js');
 const bs58 = require('bs58');
 const nacl = require('tweetnacl');
@@ -39,6 +59,13 @@ let solanaConnection;
 
 // Initialize Redis
 async function initRedis() {
+  // Skip Redis if module not available or no host configured
+  if (!createClient) {
+    console.log('ℹ️  Redis module not available, skipping...');
+    redisClient = null;
+    return Promise.resolve();
+  }
+  
   // Skip Redis if no host is configured (Railway doesn't always have Redis)
   if (!process.env.REDIS_HOST || process.env.REDIS_HOST === '' || process.env.REDIS_HOST === 'localhost') {
     console.log('ℹ️  Redis not configured, skipping...');
@@ -76,6 +103,13 @@ async function initRedis() {
 
 // Initialize PostgreSQL
 function initPostgreSQL() {
+  // Skip PostgreSQL if module not available
+  if (!Pool) {
+    console.log('ℹ️  PostgreSQL module not available, using in-memory storage');
+    dbPool = null;
+    return;
+  }
+  
   // Skip PostgreSQL if no host is configured (Railway doesn't always have PostgreSQL)
   if (!process.env.DB_HOST || process.env.DB_HOST === '' || process.env.DB_HOST === 'localhost') {
     console.log('ℹ️  PostgreSQL not configured, using in-memory storage');
@@ -604,6 +638,8 @@ app.get('/health', (req, res) => {
     redis: redisClient?.isOpen ? 'connected' : 'disconnected',
     postgres: dbPool ? 'connected' : 'disconnected',
     solana: solanaConnection ? 'connected' : 'disconnected',
+    port: PORT,
+    env: process.env.NODE_ENV || 'development',
   });
 });
 
