@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>The Key of Silent Insight</title>
+    <title>THE KEY</title>
     <style>
         * {
             margin: 0;
@@ -245,6 +245,16 @@
             background: transparent;
             position: relative;
             z-index: 1;
+            animation: rotateVideo 20s linear infinite;
+        }
+        
+        @keyframes rotateVideo {
+            from {
+                transform: rotate(0deg);
+            }
+            to {
+                transform: rotate(360deg);
+            }
         }
         
         .nft-preview {
@@ -256,6 +266,7 @@
             background: #0a0a0a;
             margin: 2rem auto;
             box-shadow: 0 0 20px rgba(255, 255, 255, 0.1);
+            animation: rotateVideo 20s linear infinite;
         }
         
         .nft-info {
@@ -402,17 +413,36 @@
                     // Für Production: Verwende Backend URL aus Window-Variable oder Fallback
                     // Setze diese Variable beim Deployment in einem <script> Tag:
                     // <script>window.BACKEND_API_URL = 'https://deine-backend-url.com';</script>
-                    const BACKEND_URL = window.BACKEND_API_URL || 'https://silent-insight-api.railway.app';
+                    // Verwende Custom Domain falls verfügbar, sonst Fallback
+                    const hostname = window.location.hostname.toLowerCase();
+                    let BACKEND_URL;
+                    
+                    if (window.BACKEND_API_URL) {
+                        // Explizit gesetzte Backend URL hat Priorität
+                        BACKEND_URL = window.BACKEND_API_URL;
+                    } else if (hostname.includes('thekeyofsilentinsight') || hostname.includes('thekey')) {
+                        // Custom Domain erkannt - verwende Fallback Tunnel bis API-Subdomain konfiguriert ist
+                        // TODO: Sobald Cloudflare Tunnel für api.thekeyofsilentinsight.com läuft, ändere zu:
+                        // BACKEND_URL = 'https://api.thekeyofsilentinsight.com';
+                        BACKEND_URL = 'https://eye-respondents-continue-provisions.trycloudflare.com';
+                    } else {
+                        // Fallback zu Cloudflare Tunnel
+                        BACKEND_URL = 'https://eye-respondents-continue-provisions.trycloudflare.com';
+                    }
                     apiBase = `${BACKEND_URL}/v1`;
                 }
                 
                 console.log('📡 Fetching stats from:', apiBase);
-                const response = await fetch(`${apiBase}/alignment/stats`, {
+                
+                // Füge Timestamp hinzu, um Cache zu vermeiden
+                const timestamp = Date.now();
+                const response = await fetch(`${apiBase}/alignment/stats?t=${timestamp}`, {
                     method: 'GET',
                     headers: {
-                        'Content-Type': 'application/json'
+                        'Content-Type': 'application/json',
+                        'Cache-Control': 'no-cache'
                     },
-                    cache: 'no-cache' // Immer frische Daten
+                    cache: 'no-store' // Immer frische Daten
                 });
                 
                 if (response.ok) {
@@ -420,40 +450,110 @@
                     const minted = parseInt(data.minted) || 0;
                     const totalSupply = parseInt(data.total_supply) || 999;
                     
-                    console.log('✅ Stats received:', { minted, totalSupply });
+                    console.log('✅ Stats received:', { minted, totalSupply, timestamp: data.timestamp, backendUrl: BACKEND_URL });
                     
                     // Aktualisiere Counter mit ECHTEN Daten
-                    document.getElementById('mintCounter').textContent = `${minted}/${totalSupply}`;
+                    const counterEl = document.getElementById('mintCounter');
+                    if (counterEl) {
+                        counterEl.textContent = `${minted}/${totalSupply}`;
+                        // Füge Animation hinzu für visuelles Feedback
+                        counterEl.style.transition = 'all 0.3s ease';
+                        counterEl.style.transform = 'scale(1.05)';
+                        setTimeout(() => {
+                            counterEl.style.transform = 'scale(1)';
+                        }, 300);
+                    }
+                    
                     updateNFTDisplay(minted);
                     
                     // Speichere für Fallback
                     localStorage.setItem('mintCount', minted.toString());
                     localStorage.setItem('lastUpdate', Date.now().toString());
                 } else {
-                    console.error('❌ API Error:', response.status, response.statusText);
+                    console.error('❌ API Error:', response.status, response.statusText, 'Backend URL:', BACKEND_URL);
+                    
+                    // Versuche Fallback-URL wenn Custom Domain nicht funktioniert
+                    if (hostname.includes('thekeyofsilentinsight') && BACKEND_URL.includes('api.thekeyofsilentinsight.com')) {
+                        console.log('⚠️  API-Subdomain nicht verfügbar, versuche Fallback...');
+                        const fallbackUrl = 'https://eye-respondents-continue-provisions.trycloudflare.com';
+                        try {
+                            const fallbackResponse = await fetch(`${fallbackUrl}/v1/alignment/stats?t=${Date.now()}`, {
+                                method: 'GET',
+                                headers: { 'Content-Type': 'application/json' },
+                                cache: 'no-store'
+                            });
+                            if (fallbackResponse.ok) {
+                                const fallbackData = await fallbackResponse.json();
+                                const minted = parseInt(fallbackData.minted) || 0;
+                                const counterEl = document.getElementById('mintCounter');
+                                if (counterEl) {
+                                    counterEl.textContent = `${minted}/999`;
+                                }
+                                updateNFTDisplay(minted);
+                                localStorage.setItem('mintCount', minted.toString());
+                                return; // Erfolgreich mit Fallback
+                            }
+                        } catch (e) {
+                            console.error('Fallback auch fehlgeschlagen:', e);
+                        }
+                    }
+                    
                     // Fallback zu localStorage
                     const stored = parseInt(localStorage.getItem('mintCount') || '0');
-                    document.getElementById('mintCounter').textContent = `${stored}/999`;
+                    const counterEl = document.getElementById('mintCounter');
+                    if (counterEl) {
+                        counterEl.textContent = `${stored}/999`;
+                    }
                     updateNFTDisplay(stored);
                 }
             } catch (error) {
-                console.error('❌ Fetch Error:', error);
+                console.error('❌ Fetch Error:', error.message, 'Backend URL:', BACKEND_URL);
+                
+                // Versuche Fallback-URL wenn Custom Domain nicht funktioniert
+                if (hostname.includes('thekeyofsilentinsight') && BACKEND_URL.includes('api.thekeyofsilentinsight.com')) {
+                    console.log('⚠️  API-Subdomain nicht erreichbar, versuche Fallback...');
+                    const fallbackUrl = 'https://eye-respondents-continue-provisions.trycloudflare.com';
+                    try {
+                        const fallbackResponse = await fetch(`${fallbackUrl}/v1/alignment/stats?t=${Date.now()}`, {
+                            method: 'GET',
+                            headers: { 'Content-Type': 'application/json' },
+                            cache: 'no-store'
+                        });
+                        if (fallbackResponse.ok) {
+                            const fallbackData = await fallbackResponse.json();
+                            const minted = parseInt(fallbackData.minted) || 0;
+                            const counterEl = document.getElementById('mintCounter');
+                            if (counterEl) {
+                                counterEl.textContent = `${minted}/999`;
+                            }
+                            updateNFTDisplay(minted);
+                            localStorage.setItem('mintCount', minted.toString());
+                            return; // Erfolgreich mit Fallback
+                        }
+                    } catch (e) {
+                        console.error('Fallback auch fehlgeschlagen:', e);
+                    }
+                }
+                
                 // Fallback: use localStorage or default
                 const stored = parseInt(localStorage.getItem('mintCount') || '0');
-                document.getElementById('mintCounter').textContent = `${stored}/999`;
+                const counterEl = document.getElementById('mintCounter');
+                if (counterEl) {
+                    counterEl.textContent = `${stored}/999`;
+                }
                 updateNFTDisplay(stored);
             }
         }
         
-        // Update counter on load and every 10 seconds (häufiger für Live-Updates)
+        // Update counter on load and every 5 seconds (häufiger für Live-Updates)
         updateMintCounter();
-        setInterval(updateMintCounter, 10000); // Alle 10 Sekunden aktualisieren
+        setInterval(updateMintCounter, 5000); // Alle 5 Sekunden aktualisieren für Echtzeit-Updates
     </script>
 </head>
 <body>
     <div class="container">
         <header>
-            <h1>THE KEY OF SILENT INSIGHT</h1>
+            <h1>THE KEY</h1>
             <div class="subtitle">ALIGNMENT PRECEDES ACCESS</div>
         </header>
         
@@ -475,10 +575,10 @@
         </div>
         
         <div class="nft-info">
-            <div class="nft-name">THE KEY OF SILENT INSIGHT</div>
+            <div class="nft-name">THE KEY</div>
             <div class="nft-number" id="nftNumber">#0</div>
             <div class="nft-rarity" id="nftRarity">Rarity 1</div>
-            <video class="nft-preview" id="nftPreview" autoplay loop muted playsinline>
+            <video class="nft-preview" id="nftPreview" autoplay loop muted playsinline style="animation: rotateVideo 20s linear infinite;">
                 <source src="orb-video.mp4" type="video/mp4">
                 Your browser does not support the video tag.
             </video>
@@ -625,7 +725,7 @@
         </div>
         
         <footer>
-            THE KEY OF SILENT INSIGHT<br>
+            THE KEY<br>
             ROTATION: CONTINUOUS · ALIGNMENT: PERSISTENT · OUTPUT: TRANSFORMATION
         </footer>
     </div>
