@@ -1,0 +1,11 @@
+{
+  "name": "silent-insight-mint",
+  "version": "1.0.0",
+  "description": "Key of Silent Insight - Alignment Protocol Mint",
+  "main": "mint_key.js",
+  "dependencies": {
+    "@solana/web3.js": "^1.95.0",
+    "bs58": "^6.0.0",
+    "tweetnacl": "^1.0.3"
+  }
+}

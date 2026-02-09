@@ -1,0 +1,26 @@
+{
+  "price": 0.025,
+  "number": 999,
+  "gatekeeper": null,
+  "solTreasuryAccount": "54EYFfVLAsvP3khBHqnmam3WGAo6Kg9TPLL9EZZc14g7",
+  "splTokenAccount": null,
+  "splToken": null,
+  "goLiveDate": 1736539200,
+  "endSettings": null,
+  "whitelistMintSettings": null,
+  "hiddenSettings": null,
+  "storage": "bundlr",
+  "ipfsInfuraProjectId": null,
+  "ipfsInfuraSecret": null,
+  "awsS3Bucket": null,
+  "noRetainAuthority": false,
+  "noMutable": false,
+  "symbol": "KEY",
+  "sellerFeeBasisPoints": 0,
+  "creators": [
+    {
+      "address": "54EYFfVLAsvP3khBHqnmam3WGAo6Kg9TPLL9EZZc14g7",
+      "share": 100
+    }
+  ]
+}
